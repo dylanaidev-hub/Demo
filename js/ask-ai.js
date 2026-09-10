@@ -9,16 +9,22 @@ const AskAI = (() => {
     { id: "gemini", name: "Gemini", icon: ICON.gemini, chatPlaceholder: "Message Gemini...", status: "ready", available: true },
   ];
 
-  const QUICK_ACTIONS = [
-    { id: "summarize", label: "Summarize", menuLabel: "Summarize page", prompt: "Summarize this page" },
-    { id: "explain", label: "Explain", menuLabel: "Explain page", prompt: "Explain this page" },
-    { id: "translate", label: "Translate", menuLabel: "Translate page", prompt: "Translate this page to English" },
-    { id: "keypoints", label: "Key points", menuLabel: "Key points", prompt: "List the key points of this page" },
+  const SKILL_ICON = {
+    list: `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M4 6.5h2.2V8.7H4zm0 4.4h2.2v2.2H4zm0 4.4h2.2v2.2H4zM8.4 6.7H20v1.8H8.4zm0 4.4H20v1.8H8.4zm0 4.4H20v1.8H8.4z"/></svg>`,
+    search: `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M15.5 14.2h-.8l-.3-.3a6.5 6.5 0 1 0-.7.7l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>`,
+    pencil: `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M4 17.3V20h2.7l8-8-2.7-2.7-8 8zM19.7 7.3c.3-.3.3-.8 0-1.1l-1.9-1.9a.8.8 0 0 0-1.1 0L15 5l2.7 2.7 2-1.4z"/></svg>`,
+  };
+
+  const SKILLS = [
+    { id: "tom-tat", command: "/tom-tat", title: "Tóm tắt", desc: "Gói nội dung thành các ý chính", icon: SKILL_ICON.list, prompt: "Tóm tắt trang này thành các ý chính" },
+    { id: "giai-thich", command: "/giai-thich", title: "Giải thích", desc: "Diễn giải đơn giản, có ví dụ", icon: SKILL_ICON.search, prompt: "Giải thích trang này một cách đơn giản, có ví dụ" },
+    { id: "hoi-sau", command: "/hoi-sau", title: "Hỏi sâu", desc: "Đào sâu bằng câu hỏi phản biện", icon: SKILL_ICON.search, prompt: "Đặt câu hỏi phản biện để đào sâu nội dung trang này" },
+    { id: "viet-lai", command: "/viet-lai", title: "Viết lại", desc: "Giữ ý, câu chữ gọn hơn", icon: SKILL_ICON.pencil, prompt: "Viết lại nội dung trang này cho gọn hơn, giữ nguyên ý" },
   ];
 
   const panel = {
     open: false,
-    focusedChat: null,
+    view: "home",
     getPage: () => null,
     getSelection: () => "",
   };
@@ -26,7 +32,9 @@ const AskAI = (() => {
   const overlay = {
     prompt: "",
     selectedProviders: ["chatgpt"],
-    selectedSuggestedPrompt: "",
+    selectedSkill: "",
+    skillHighlight: 0,
+    skillPickerDismissed: false,
   };
 
   const providers = {};
@@ -34,8 +42,6 @@ const AskAI = (() => {
   function emptyProviderState() {
     return {
       isOpened: false,
-      isPopupOpen: false,
-      minimized: false,
       conversationId: null,
       messages: [],
       draft: "",
@@ -53,6 +59,47 @@ const AskAI = (() => {
 
   function providerById(id) {
     return PROVIDERS.find((p) => p.id === id);
+  }
+
+  function skillFromPrompt(text) {
+    const token = String(text || "").trim().split(/\s+/)[0].toLowerCase();
+    return SKILLS.find((s) => s.command === token) || null;
+  }
+
+  function slashFilter(text) {
+    const m = String(text || "").match(/^\/([^\s]*)$/);
+    return m ? m[1].toLowerCase() : null;
+  }
+
+  function filteredSkills() {
+    const q = slashFilter(overlay.prompt);
+    if (q === null) return SKILLS.slice();
+    return SKILLS.filter((s) => (
+      s.command.slice(1).includes(q) ||
+      s.title.toLowerCase().includes(q) ||
+      s.desc.toLowerCase().includes(q)
+    ));
+  }
+
+  function pickerIsOpen() {
+    return slashFilter(overlay.prompt) !== null && !overlay.skillPickerDismissed;
+  }
+
+  function applySkill(skill) {
+    if (!skill) return;
+    overlay.selectedSkill = skill.id;
+    overlay.prompt = skill.command;
+    overlay.skillPickerDismissed = true;
+    overlay.skillHighlight = 0;
+    const input = $("askPrompt");
+    if (input) {
+      input.value = skill.command;
+      input.focus();
+      input.setSelectionRange(skill.command.length, skill.command.length);
+    }
+    AskAIComposer.updateCta();
+    SkillList.render();
+    SkillPicker.render();
   }
 
   function ensureProvider(id) {
@@ -74,8 +121,8 @@ const AskAI = (() => {
     return PROVIDERS.filter((p) => ensureProvider(p.id).isOpened);
   }
 
-  function popupEl(id) {
-    return document.querySelector(`.chat-popup[data-provider="${id}"]`);
+  function isHome() {
+    return panel.view === "home";
   }
 
   function pageSummary(page) {
@@ -113,6 +160,13 @@ const AskAI = (() => {
       if (/translate/i.test(prompt)) body = `English gist of the selected text:\n\n${snippet}`;
       else if (/rewrite/i.test(prompt)) body = `Rewritten selection:\n\n${snippet}`;
       else body = `About the selected text on “${title}”:\n\n${snippet}\n\n${base}`;
+    } else if (skillFromPrompt(prompt)) {
+      const skill = skillFromPrompt(prompt);
+      if (skill.id === "tom-tat") body = base;
+      else if (skill.id === "giai-thich") body = `Giải thích “${title}” một cách đơn giản:\n\n${base}\n\nVí dụ: bạn có thể hỏi thêm một ý bất kỳ trong bài để mình diễn giải sâu hơn.`;
+      else if (skill.id === "hoi-sau") body = `Một vài câu hỏi phản biện về “${title}”:\n\n• Điều gì còn thiếu so với hiện trạng đang mô tả?\n• Lợi ích nêu trong bài có đánh đổi gì không?\n• ${secondBullet(base)}\n\nBạn muốn mình trả lời câu nào trước?`;
+      else if (skill.id === "viet-lai") body = `Bản viết lại gọn hơn:\n\n${base.split("\n").filter(Boolean).slice(0, 6).join("\n")}`;
+      else body = base;
     } else if (isFollowUp && prior && !/summarize this page|explain this page|translate this page|key points of this page/i.test(prompt)) {
       if (/point 2|điểm 2|second/.test(q)) {
         body = `Điểm 2 trong câu trả lời trước:\n\n${secondBullet(prior.text)}\n\nBạn muốn mình đi sâu hơn điểm này không?`;
@@ -159,10 +213,11 @@ const AskAI = (() => {
           slot.error = `${provider.name} failed to respond.`;
         }
       }
-      ChatPopups.renderMessages(provider.id, { stickToBottom: true });
-      ChatPopups.syncHeader(provider.id);
-      ChatPopups.updateComposer(provider.id);
-      OpenChats.render();
+      AiRail.render();
+      if (panel.view === provider.id) {
+        ProviderMessageList.render(provider.id, { stickToBottom: true });
+        ProviderNativeChatBox.update(provider.id);
+      }
     }, delay);
   }
 
@@ -176,8 +231,6 @@ const AskAI = (() => {
     targets.forEach((p) => {
       const slot = ensureProvider(p.id);
       slot.isOpened = true;
-      slot.isPopupOpen = true;
-      slot.minimized = false;
       if (!slot.conversationId) slot.conversationId = Date.now();
       slot.messages.push({ role: "user", text, source });
       slot.error = "";
@@ -185,19 +238,12 @@ const AskAI = (() => {
     });
 
     overlay.prompt = "";
-    overlay.selectedSuggestedPrompt = "";
+    overlay.selectedSkill = "";
+    overlay.skillPickerDismissed = false;
     overlay.selectedProviders = [targets[0].id];
     const homeInput = $("askPrompt");
     if (homeInput) homeInput.value = "";
-    panel.focusedChat = targets[0].id;
-    ChatPopups.sync();
-    targets.forEach((p) => ChatPopups.renderMessages(p.id, { stickToBottom: true }));
-    const dock = $("messengerDock");
-    const top = popupEl(targets[0].id);
-    if (dock && top) dock.appendChild(top);
-    AskAIComposer.render();
-    OpenChats.render();
-    ChatPopups.focusInput(targets[0].id);
+    Workspace.activate(targets[0].id);
     return true;
   }
 
@@ -206,7 +252,7 @@ const AskAI = (() => {
     const slot = ensureProvider(id);
     if (!p) return "";
     if (!slot.messages.length && !slot.isLoading) {
-      return `<div class="provider-empty">Say hi to ${escapeHtml(p.name)}</div>`;
+      return `<div class="provider-empty">Start a conversation with ${escapeHtml(p.name)}.</div>`;
     }
     let html = slot.messages.map((m) => {
       if (m.role === "user") {
@@ -221,161 +267,114 @@ const AskAI = (() => {
     return html;
   }
 
-  /* ---- ChatPopups (Messenger-style windows) ---- */
-  const ChatPopups = {
-    template(p) {
-      return `<header class="chat-popup-head">
-          <div class="chat-popup-person">
-            <span class="chat-popup-avatar ${p.id}">${p.icon}</span>
-            <div class="chat-popup-name">${escapeHtml(p.name)}</div>
-          </div>
-          <button type="button" class="chat-popup-btn" data-min title="Minimize" aria-label="Minimize">–</button>
-          <button type="button" class="chat-popup-btn" data-close title="Close" aria-label="Close">×</button>
-        </header>
-        <div class="chat-popup-body">
-          <div class="popup-chat"></div>
-          <div class="provider-compose">
-            <form class="provider-box popup-form">
-              <textarea class="popup-draft" rows="1" maxlength="2000" placeholder="${escapeHtml(p.chatPlaceholder)}"></textarea>
-              <button type="submit" class="provider-send" title="Send" disabled>
-                <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3.4 20.6 21.2 12 3.4 3.4 3.3 10.1 15.5 12 3.3 13.9z"/></svg>
-              </button>
-            </form>
-          </div>
-        </div>`;
+  /* ---- Workspace ---- */
+  const Workspace = {
+    activate(id) {
+      if (!isHome()) ProviderNativeChatBox.saveDraft();
+      if (!isHome()) ProviderMessageList.saveScroll();
+      panel.view = id;
+      AskAISidePanel.render();
+      if (id === "home") $("askPrompt")?.focus();
+      else ProviderNativeChatBox.focus();
     },
-    ensure(id) {
-      const dock = $("messengerDock");
+    close(id) {
       const p = providerById(id);
-      if (!dock || !p) return null;
-      let el = popupEl(id);
-      if (el) return el;
-      el = document.createElement("section");
-      el.className = "chat-popup";
-      el.dataset.provider = id;
-      el.innerHTML = ChatPopups.template(p);
-      dock.appendChild(el);
-      requestAnimationFrame(() => el.classList.add("open"));
-      return el;
+      if (!p || !ensureProvider(id).isOpened) return;
+      if (panel.view === id) Workspace.activate("home");
     },
-    syncHeader(id) {
-      const el = popupEl(id);
-      if (!el) return;
-      el.classList.toggle("minimized", ensureProvider(id).minimized);
-      el.classList.toggle("focused", panel.focusedChat === id);
+  };
+
+  /* ---- AiRail ---- */
+  const AiRail = {
+    render() {
+      const homeBtn = $("railAskAi");
+      const chats = $("railChats");
+      if (homeBtn) homeBtn.classList.toggle("active", isHome());
+      if (!chats) return;
+      chats.innerHTML = openedProviders().map((p) => {
+        const slot = ensureProvider(p.id);
+        const active = panel.view === p.id ? "active" : "";
+        const loading = slot.isLoading ? "is-loading" : "";
+        return `<div class="rail-item ${active}">
+          <button type="button" class="rail-btn ${active} ${loading}" data-workspace="${p.id}" title="${escapeHtml(p.name)}">
+            <span class="rail-icon">${p.icon}</span>
+          </button>
+          <button type="button" class="rail-close" data-close-chat="${p.id}" title="Ẩn ${escapeHtml(p.name)}" aria-label="Ẩn ${escapeHtml(p.name)}">
+            <svg viewBox="0 0 12 12" width="8" height="8"><path d="M2.2 2.2l7.6 7.6M9.8 2.2L2.2 9.8" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          </button>
+        </div>`;
+      }).join("");
     },
-    renderMessages(id, { stickToBottom = false } = {}) {
-      const el = popupEl(id);
-      if (!el) return;
-      const chat = el.querySelector(".popup-chat");
+  };
+
+  /* ---- ProviderMessageList ---- */
+  const ProviderMessageList = {
+    saveScroll() {
+      const el = $("providerChat");
+      if (!el || isHome()) return;
+      ensureProvider(panel.view).scroll = el.scrollTop;
+    },
+    render(id, { stickToBottom = false } = {}) {
+      const chat = $("providerChat");
       const slot = ensureProvider(id);
       if (!chat) return;
       chat.innerHTML = messageHtml(id);
       if (stickToBottom || slot.isLoading) chat.scrollTop = chat.scrollHeight;
       else chat.scrollTop = slot.scroll || 0;
     },
-    updateComposer(id) {
-      const el = popupEl(id);
+  };
+
+  /* ---- ProviderNativeChatBox ---- */
+  const ProviderNativeChatBox = {
+    saveDraft() {
+      const input = $("providerDraft");
+      if (!input || isHome()) return;
+      ensureProvider(panel.view).draft = input.value;
+    },
+    update(id) {
+      const input = $("providerDraft");
+      const send = $("providerSend");
       const p = providerById(id);
       const slot = ensureProvider(id);
-      if (!el || !p) return;
-      const input = el.querySelector(".popup-draft");
-      const send = el.querySelector(".provider-send");
-      if (input && document.activeElement !== input && input.value !== slot.draft) {
-        input.value = slot.draft;
-      }
-      const canSend = Boolean((input ? input.value : slot.draft).trim()) && !slot.isLoading && p.available;
+      if (!input || !p) return;
+      input.placeholder = p.chatPlaceholder;
+      if (input.value !== slot.draft) input.value = slot.draft;
+      const canSend = Boolean(slot.draft.trim()) && !slot.isLoading && p.available;
       if (send) send.disabled = !canSend;
-      if (input) {
-        input.style.height = "auto";
-        input.style.height = `${Math.min(input.scrollHeight, 72)}px`;
-      }
+      input.style.height = "auto";
+      input.style.height = `${Math.min(input.scrollHeight, 72)}px`;
     },
-    sync() {
-      PROVIDERS.forEach((p) => {
-        const slot = ensureProvider(p.id);
-        if (slot.isOpened && slot.isPopupOpen) {
-          ChatPopups.ensure(p.id);
-          ChatPopups.syncHeader(p.id);
-          ChatPopups.updateComposer(p.id);
-        } else {
-          popupEl(p.id)?.remove();
-        }
-      });
+    focus() {
+      $("providerDraft")?.focus();
     },
-    open(id) {
-      const slot = ensureProvider(id);
-      if (!slot.isOpened) return;
-      slot.isPopupOpen = true;
-      slot.minimized = false;
-      panel.focusedChat = id;
-      const el = ChatPopups.ensure(id);
-      const dock = $("messengerDock");
-      if (el && dock) dock.appendChild(el);
-      ChatPopups.syncHeader(id);
-      ChatPopups.renderMessages(id);
-      ChatPopups.updateComposer(id);
-      ChatPopups.focusInput(id);
-    },
-    close(id) {
-      const slot = ensureProvider(id);
-      const el = popupEl(id);
-      if (el) slot.scroll = el.querySelector(".popup-chat")?.scrollTop || 0;
-      slot.isPopupOpen = false;
-      slot.minimized = false;
-      if (panel.focusedChat === id) panel.focusedChat = null;
-      ChatPopups.sync();
-      OpenChats.render();
-    },
-    toggleMin(id) {
-      const slot = ensureProvider(id);
-      slot.minimized = !slot.minimized;
-      if (!slot.minimized) panel.focusedChat = id;
-      ChatPopups.syncHeader(id);
-    },
-    focusInput(id) {
-      const input = popupEl(id)?.querySelector(".popup-draft");
-      input?.focus();
-    },
-    submit(id) {
+    submit() {
+      if (isHome()) return;
+      const id = panel.view;
       const p = providerById(id);
       const slot = ensureProvider(id);
-      const el = popupEl(id);
-      const input = el?.querySelector(".popup-draft");
-      const text = (input ? input.value : slot.draft).trim();
+      const text = (slot.draft || "").trim();
       if (!p || !text || slot.isLoading || !p.available) return;
       slot.draft = "";
+      const input = $("providerDraft");
       if (input) input.value = "";
       slot.messages.push({ role: "user", text, source: "provider" });
       slot.error = "";
       dispatch(p, text);
-      ChatPopups.renderMessages(id, { stickToBottom: true });
-      ChatPopups.updateComposer(id);
-      ChatPopups.syncHeader(id);
+      ProviderMessageList.render(id, { stickToBottom: true });
+      ProviderNativeChatBox.update(id);
+      AiRail.render();
     },
   };
 
-  /* ---- OpenChats (reopen from Ask AI panel) ---- */
-  const OpenChats = {
+  /* ---- ProviderConversation ---- */
+  const ProviderConversation = {
     render() {
-      const row = $("openChats");
-      if (!row) return;
-      const opened = openedProviders();
-      if (!opened.length) {
-        row.hidden = true;
-        row.innerHTML = "";
-        return;
-      }
-      row.hidden = false;
-      row.innerHTML = `<div class="composer-label">Chats</div><div class="ask-with">`
-        + opened.map((p) => {
-          const slot = ensureProvider(p.id);
-          const on = slot.isPopupOpen && !slot.minimized ? "selected" : "";
-          return `<button type="button" class="ask-with-chip ${on}" data-open-chat="${p.id}">
-            <span class="provider-tab-icon">${p.icon}</span>${escapeHtml(p.name)}
-          </button>`;
-        }).join("")
-        + `</div>`;
+      const pane = $("providerView");
+      const show = !isHome() && Boolean(providerById(panel.view));
+      if (pane) pane.hidden = !show;
+      if (!show) return;
+      ProviderMessageList.render(panel.view);
+      ProviderNativeChatBox.update(panel.view);
     },
   };
 
@@ -384,19 +383,24 @@ const AskAI = (() => {
     render() {
       const el = $("sidePanel");
       const askBtn = $("askAiBtn");
+      const title = $("workspaceTitle");
       if (el) el.hidden = !panel.open;
       if (askBtn) {
         askBtn.classList.toggle("active", panel.open);
         askBtn.setAttribute("aria-pressed", String(panel.open));
       }
+      const p = providerById(panel.view);
+      if (title) title.textContent = p ? p.name : "Ask AI";
+      AiRail.render();
       AskAIComposer.render();
-      OpenChats.render();
-      ChatPopups.sync();
+      ProviderConversation.render();
     },
     setOpen(open) {
       panel.open = open;
       AskAISidePanel.render();
-      if (open) $("askPrompt")?.focus();
+      if (!open) return;
+      if (isHome()) $("askPrompt")?.focus();
+      else ProviderNativeChatBox.focus();
     },
     toggle() {
       AskAISidePanel.setOpen(!panel.open);
@@ -421,22 +425,56 @@ const AskAI = (() => {
     },
   };
 
-  function renderSuggestionRow() {
-    const row = $("homeSuggestions");
-    if (!row) return;
-    row.innerHTML = QUICK_ACTIONS.map((s) => {
-      const on = overlay.selectedSuggestedPrompt === s.id || overlay.prompt === s.prompt ? "active" : "";
-      return `<button type="button" class="suggest-chip ${on}" data-id="${s.id}">${escapeHtml(s.label)}</button>`;
-    }).join("");
+  function skillRowHtml(s, { active = false, picker = false } = {}) {
+    const cls = picker ? "skill-picker-item" : "skill-row";
+    return `<button type="button" class="${cls} ${active ? "active" : ""}" data-skill="${s.id}">
+      <span class="skill-icon">${s.icon}</span>
+      <span class="skill-copy">
+        <span class="skill-title">${escapeHtml(s.title)}</span>
+        <span class="skill-desc">${escapeHtml(s.desc)}</span>
+      </span>
+      <span class="skill-cmd">${escapeHtml(s.command)}</span>
+    </button>`;
   }
+
+  const SkillList = {
+    render() {
+      const list = $("homeSkills");
+      if (!list) return;
+      list.innerHTML = SKILLS.map((s) => {
+        const on = overlay.selectedSkill === s.id || overlay.prompt.trim() === s.command;
+        return skillRowHtml(s, { active: on });
+      }).join("");
+    },
+  };
+
+  const SkillPicker = {
+    render() {
+      const el = $("skillPicker");
+      if (!el) return;
+      const open = pickerIsOpen();
+      el.hidden = !open;
+      if (!open) return;
+      const items = filteredSkills();
+      if (!items.length) {
+        el.innerHTML = `<div class="skill-picker-empty">Không có skill phù hợp</div>`;
+        return;
+      }
+      if (overlay.skillHighlight >= items.length) overlay.skillHighlight = 0;
+      el.innerHTML = items.map((s, i) => skillRowHtml(s, { active: i === overlay.skillHighlight, picker: true })).join("");
+    },
+  };
 
   const AskAIComposer = {
     render() {
       const view = $("homeView");
-      if (view) view.hidden = false;
+      const show = isHome();
+      if (view) view.hidden = !show;
+      if (!show) return;
       const input = $("askPrompt");
       if (input && input.value !== overlay.prompt) input.value = overlay.prompt;
-      renderSuggestionRow();
+      SkillList.render();
+      SkillPicker.render();
       ProviderSelector.render();
       AskAIComposer.updateCta();
     },
@@ -454,37 +492,92 @@ const AskAI = (() => {
 
   function bind() {
     $("closePanelBtn")?.addEventListener("click", () => AskAISidePanel.setOpen(false));
+    $("railAskAi")?.addEventListener("click", () => Workspace.activate("home"));
+    $("railChats")?.addEventListener("click", (e) => {
+      const close = e.target.closest("[data-close-chat]");
+      if (close) {
+        Workspace.close(close.dataset.closeChat);
+        return;
+      }
+      const btn = e.target.closest("[data-workspace]");
+      if (!btn) return;
+      Workspace.activate(btn.dataset.workspace);
+    });
     $("askCta")?.addEventListener("click", () => AskAIComposer.submit());
     $("askPrompt")?.addEventListener("input", (e) => {
       overlay.prompt = e.target.value;
-      if (overlay.selectedSuggestedPrompt) {
-        const item = QUICK_ACTIONS.find((s) => s.id === overlay.selectedSuggestedPrompt);
-        if (!item || e.target.value !== item.prompt) overlay.selectedSuggestedPrompt = "";
-      }
+      overlay.skillPickerDismissed = false;
+      const skill = skillFromPrompt(overlay.prompt);
+      overlay.selectedSkill = skill && overlay.prompt.trim() === skill.command ? skill.id : "";
+      overlay.skillHighlight = 0;
       AskAIComposer.updateCta();
-      renderSuggestionRow();
+      SkillList.render();
+      SkillPicker.render();
     });
     $("askPrompt")?.addEventListener("keydown", (e) => {
+      if (pickerIsOpen()) {
+        const items = filteredSkills();
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          if (!items.length) return;
+          overlay.skillHighlight = (overlay.skillHighlight + 1) % items.length;
+          SkillPicker.render();
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          if (!items.length) return;
+          overlay.skillHighlight = (overlay.skillHighlight - 1 + items.length) % items.length;
+          SkillPicker.render();
+          return;
+        }
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          applySkill(items[overlay.skillHighlight] || items[0]);
+          return;
+        }
+        if (e.key === "Tab") {
+          e.preventDefault();
+          applySkill(items[overlay.skillHighlight] || items[0]);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          overlay.skillPickerDismissed = true;
+          SkillPicker.render();
+          return;
+        }
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         AskAIComposer.submit();
       }
     });
-    $("homeSuggestions")?.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-id]");
+    $("homeSkills")?.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-skill]");
       if (!btn) return;
-      const item = QUICK_ACTIONS.find((s) => s.id === btn.dataset.id);
-      if (!item) return;
-      overlay.prompt = item.prompt;
-      overlay.selectedSuggestedPrompt = item.id;
+      applySkill(SKILLS.find((s) => s.id === btn.dataset.skill));
+    });
+    $("skillPicker")?.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-skill]");
+      if (!btn) return;
+      applySkill(SKILLS.find((s) => s.id === btn.dataset.skill));
+    });
+    $("allSkillsBtn")?.addEventListener("click", () => {
+      overlay.prompt = "/";
+      overlay.selectedSkill = "";
+      overlay.skillPickerDismissed = false;
+      overlay.skillHighlight = 0;
       const input = $("askPrompt");
       if (input) {
-        input.value = item.prompt;
+        input.value = "/";
         input.focus();
-        input.setSelectionRange(item.prompt.length, item.prompt.length);
+        input.setSelectionRange(1, 1);
       }
       AskAIComposer.updateCta();
-      renderSuggestionRow();
+      SkillList.render();
+      SkillPicker.render();
     });
     $("homeProviderSelector")?.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-provider]");
@@ -498,59 +591,25 @@ const AskAI = (() => {
       ProviderSelector.render();
       AskAIComposer.updateCta();
     });
-    $("openChats")?.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-open-chat]");
-      if (!btn) return;
-      ChatPopups.open(btn.dataset.openChat);
-      OpenChats.render();
-    });
-
-    const dock = $("messengerDock");
-    dock?.addEventListener("click", (e) => {
-      const popup = e.target.closest(".chat-popup");
-      if (!popup) return;
-      const id = popup.dataset.provider;
-      panel.focusedChat = id;
-      if (e.target.closest("[data-close]")) {
-        ChatPopups.close(id);
-        return;
-      }
-      if (e.target.closest("[data-min]")) {
-        ChatPopups.toggleMin(id);
-        return;
-      }
-      const slot = ensureProvider(id);
-      if (slot.minimized) {
-        slot.minimized = false;
-        ChatPopups.syncHeader(id);
-        ChatPopups.focusInput(id);
-      }
-    });
-    dock?.addEventListener("submit", (e) => {
-      const form = e.target.closest(".popup-form");
-      if (!form) return;
+    $("providerChatForm")?.addEventListener("submit", (e) => {
       e.preventDefault();
-      const id = form.closest(".chat-popup")?.dataset.provider;
-      if (id) ChatPopups.submit(id);
+      ProviderNativeChatBox.submit();
     });
-    dock?.addEventListener("input", (e) => {
-      const input = e.target.closest(".popup-draft");
-      if (!input) return;
-      const id = input.closest(".chat-popup")?.dataset.provider;
-      if (!id) return;
-      ensureProvider(id).draft = input.value;
-      ChatPopups.updateComposer(id);
+    $("providerDraft")?.addEventListener("input", (e) => {
+      if (isHome()) return;
+      ensureProvider(panel.view).draft = e.target.value;
+      ProviderNativeChatBox.update(panel.view);
     });
-    dock?.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" || e.shiftKey) return;
-      if (!e.target.classList.contains("popup-draft")) return;
-      e.preventDefault();
-      const id = e.target.closest(".chat-popup")?.dataset.provider;
-      if (id) ChatPopups.submit(id);
+    $("providerDraft")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        ProviderNativeChatBox.submit();
+      }
     });
-
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && panel.open) AskAISidePanel.setOpen(false);
+      if (e.key !== "Escape" || !panel.open) return;
+      if (isHome() && pickerIsOpen()) return;
+      AskAISidePanel.setOpen(false);
     });
   }
 
@@ -568,10 +627,15 @@ const AskAI = (() => {
     toggle: AskAISidePanel.toggle,
     fillPrompt(text) {
       overlay.prompt = text || "";
+      overlay.selectedSkill = skillFromPrompt(overlay.prompt)?.id || "";
+      overlay.skillPickerDismissed = slashFilter(overlay.prompt) === null;
+      overlay.skillHighlight = 0;
       const input = $("askPrompt");
       if (input) input.value = overlay.prompt;
       AskAIComposer.updateCta();
-      renderSuggestionRow();
+      SkillList.render();
+      SkillPicker.render();
+      if (panel.open && !isHome()) Workspace.activate("home");
     },
     submit: AskAIComposer.submit,
     providers: PROVIDERS,
