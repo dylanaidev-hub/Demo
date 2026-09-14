@@ -280,7 +280,14 @@ const AskAI = (() => {
     close(id) {
       const p = providerById(id);
       if (!p || !ensureProvider(id).isOpened) return;
-      if (panel.view === id) Workspace.activate("home");
+      const wasActive = panel.view === id;
+      providers[id] = emptyProviderState();
+      if (wasActive) {
+        const next = openedProviders()[0];
+        Workspace.activate(next ? next.id : "home");
+      } else {
+        AskAISidePanel.render();
+      }
     },
   };
 
@@ -299,7 +306,7 @@ const AskAI = (() => {
           <button type="button" class="rail-btn ${active} ${loading}" data-workspace="${p.id}" title="${escapeHtml(p.name)}">
             <span class="rail-icon">${p.icon}</span>
           </button>
-          <button type="button" class="rail-close" data-close-chat="${p.id}" title="Ẩn ${escapeHtml(p.name)}" aria-label="Ẩn ${escapeHtml(p.name)}">
+          <button type="button" class="rail-close" data-close-chat="${p.id}" title="Đóng ${escapeHtml(p.name)}" aria-label="Đóng ${escapeHtml(p.name)}">
             <svg viewBox="0 0 12 12" width="8" height="8"><path d="M2.2 2.2l7.6 7.6M9.8 2.2L2.2 9.8" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
           </button>
         </div>`;
