@@ -54,6 +54,7 @@ const AskAI = (() => {
     tabManage: false,
     skillLibrary: false,
     menu: "skill",
+    layout: "stacked",
   };
 
   const providers = {};
@@ -152,6 +153,32 @@ const AskAI = (() => {
 
   function pickerIsOpen() {
     return overlay.menu === "skill";
+  }
+
+  function isSplitLayout() {
+    return overlay.layout === "split";
+  }
+
+  function skillPanelOpen() {
+    return isSplitLayout() || overlay.menu === "skill";
+  }
+
+  function applyComposerLayout() {
+    const split = overlay.layout === "split";
+    const dock = $("askDock");
+    const toggle = $("layoutToggle");
+    if (dock) dock.dataset.layout = split ? "split" : "stacked";
+    if (!toggle) return;
+    toggle.setAttribute("aria-pressed", String(split));
+    toggle.title = split ? "Gộp Skill vào chatbox" : "Tách Skill khỏi chatbox";
+    toggle.setAttribute("aria-label", toggle.title);
+  }
+
+  function toggleComposerLayout() {
+    overlay.layout = overlay.layout === "split" ? "stacked" : "split";
+    applyComposerLayout();
+    SkillPicker.render();
+    TabContext.render();
   }
 
   function setPrompt(value, { focus = false } = {}) {
@@ -770,11 +797,14 @@ const AskAI = (() => {
       const library = $("skillLibrary");
       const list = $("skillLibraryList");
       const search = $("skillSearch");
-      const open = pickerIsOpen();
+      const open = skillPanelOpen();
       const skill = skillById(overlay.selectedSkill);
       if (row) row.classList.toggle("is-empty", !skill);
-      if (label) label.textContent = skill ? skill.title : "Skill";
-      if (btn) btn.setAttribute("aria-expanded", String(open));
+      if (label) label.textContent = isSplitLayout() || !skill ? "Skill" : skill.title;
+      if (btn) {
+        btn.setAttribute("aria-expanded", String(open));
+        btn.disabled = isSplitLayout();
+      }
       if (clear) {
         clear.hidden = !skill;
         clear.title = "Bỏ chọn skill";
@@ -820,6 +850,7 @@ const AskAI = (() => {
       const view = $("homeView");
       const show = isHome();
       if (view) view.hidden = !show;
+      applyComposerLayout();
       if (!show) return;
       const input = $("askPrompt");
       if (input && input.value !== overlay.prompt) input.value = overlay.prompt;
@@ -878,8 +909,14 @@ const AskAI = (() => {
       Workspace.activate(btn.dataset.workspace);
     });
     $("askCta")?.addEventListener("click", () => AskAIComposer.submit());
+    $("layoutToggle")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleComposerLayout();
+    });
     $("skillStatusBtn")?.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (isSplitLayout()) return;
       if (overlay.menu === "skill" && overlay.skillLibrary) closeSkillLibrary();
       else openSkillMenu("");
     });
@@ -1004,7 +1041,7 @@ const AskAI = (() => {
     });
     document.addEventListener("pointerdown", (e) => {
       if (overlay.menu !== "context" && !overlay.skillLibrary) return;
-      if (e.target.closest("#composerCard")) return;
+      if (e.target.closest("#askDock") || e.target.closest("#layoutToggle")) return;
       returnToSkill();
     });
     $("homeProviderSelector")?.addEventListener("click", (e) => {

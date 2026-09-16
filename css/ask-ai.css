@@ -19,6 +19,42 @@
   border-right: 1px solid var(--line);
 }
 
+.layout-toggle {
+  position: absolute;
+  left: 12px;
+  bottom: 16px;
+  z-index: 20;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #dadce0;
+  border-radius: 20px;
+  background: #fff;
+  color: var(--icon);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(32, 33, 36, 0.18);
+}
+
+.layout-toggle:hover,
+.layout-toggle[aria-pressed="true"] {
+  background: #e8f0fe;
+  color: #1a73e8;
+  border-color: #c6dafc;
+}
+
+.layout-toggle .layout-icon-split {
+  display: none;
+}
+
+.layout-toggle[aria-pressed="true"] .layout-icon-stacked {
+  display: none;
+}
+
+.layout-toggle[aria-pressed="true"] .layout-icon-split {
+  display: block;
+}
+
 .rail-chats {
   display: flex;
   flex-direction: column;
@@ -137,11 +173,11 @@
 .panel-stage {
   flex: 1;
   min-height: 0;
-  overflow: visible;
+  overflow-y: auto;
   padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
 }
 
@@ -151,19 +187,95 @@
   flex-shrink: 0;
   position: relative;
   z-index: 3;
+  margin-top: auto;
 }
 
-.composer-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
+.ask-dock[data-layout="stacked"] {
+  gap: 0;
   border: 1px solid #e6e8eb;
   border-radius: 12px;
   background: #fff;
   overflow: hidden;
 }
 
-.composer-card:focus-within {
+.ask-dock[data-layout="stacked"]:focus-within {
+  border-color: #dadce0;
+}
+
+.ask-dock[data-layout="split"] {
+  gap: 16px;
+  background: transparent;
+  border: 0;
+  overflow: visible;
+}
+
+.skill-card {
+  display: flex;
+  flex-direction: column;
+  background: #f7f8f9;
+}
+
+.ask-dock[data-layout="split"] .skill-card {
+  border: 1px solid #e6e8eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f7f8f9;
+}
+
+.ask-dock[data-layout="split"] .skill-card:focus-within {
+  border-color: #dadce0;
+}
+
+.ask-dock[data-layout="split"] #skillStatusBtn .status-caret {
+  display: none;
+}
+
+.ask-dock[data-layout="split"] #skillStatusBtn {
+  cursor: default;
+}
+
+.ask-dock[data-layout="split"] #skillStatusBtn:hover,
+.ask-dock[data-layout="split"] #skillStatusBtn:disabled {
+  background: transparent;
+  color: #3c4043;
+  opacity: 1;
+}
+
+.ask-dock[data-layout="split"] .skill-status.is-empty .status-label {
+  font-weight: 500;
+  color: #3c4043;
+}
+
+.ask-dock[data-layout="split"] #skillPicker {
+  max-height: 380px;
+  overflow: hidden;
+  border-bottom: 0;
+}
+
+.ask-dock[data-layout="split"] #skillPicker.is-open {
+  border-bottom: 0;
+}
+
+.composer-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.ask-dock[data-layout="stacked"] .composer-card {
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.ask-dock[data-layout="split"] .composer-card {
+  border: 1px solid #e6e8eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ask-dock[data-layout="split"] .composer-card:focus-within {
   border-color: #dadce0;
 }
 

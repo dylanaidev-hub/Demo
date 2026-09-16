@@ -394,6 +394,7 @@ button, input, textarea {
   display: flex;
   min-height: 0;
   background: #fff;
+  position: relative;
 }
 
 .webview {
