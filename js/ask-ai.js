@@ -16,16 +16,28 @@ const AskAI = (() => {
   };
 
   const SKILLS = [
-    { id: "tom-tat", command: "/tom-tat", title: "Tóm tắt", desc: "Gói nội dung thành các ý chính", icon: SKILL_ICON.list, prompt: "Tóm tắt trang này thành các ý chính" },
-    { id: "giai-thich", command: "/giai-thich", title: "Giải thích", desc: "Diễn giải đơn giản, có ví dụ", icon: SKILL_ICON.search, prompt: "Giải thích trang này một cách đơn giản, có ví dụ" },
-    { id: "hoi-sau", command: "/hoi-sau", title: "Hỏi sâu", desc: "Đào sâu bằng câu hỏi phản biện", icon: SKILL_ICON.search, prompt: "Đặt câu hỏi phản biện để đào sâu nội dung trang này" },
-    { id: "viet-lai", command: "/viet-lai", title: "Viết lại", desc: "Giữ ý, câu chữ gọn hơn", icon: SKILL_ICON.pencil, prompt: "Viết lại nội dung trang này cho gọn hơn, giữ nguyên ý" },
+    { id: "tom-tat", command: "/tom-tat", title: "Tóm tắt", desc: "Gói nội dung thành ý chính", group: "Reading", icon: SKILL_ICON.list, prompt: "Tóm tắt trang này thành các ý chính" },
+    { id: "giai-thich", command: "/giai-thich", title: "Giải thích", desc: "Diễn giải đơn giản, có ví dụ", group: "Reading", icon: SKILL_ICON.search, prompt: "Giải thích trang này một cách đơn giản, có ví dụ" },
+    { id: "trich-xuat", command: "/trich-xuat", title: "Trích xuất ý chính", desc: "Lấy các luận điểm quan trọng", group: "Reading", icon: SKILL_ICON.list, prompt: "Trích xuất các ý chính của trang này" },
+    { id: "viet-lai", command: "/viet-lai", title: "Viết lại", desc: "Giữ ý, câu chữ gọn hơn", group: "Writing", icon: SKILL_ICON.pencil, prompt: "Viết lại nội dung trang này cho gọn hơn, giữ nguyên ý" },
+    { id: "rut-gon", command: "/rut-gon", title: "Rút gọn", desc: "Rút ngắn nhưng đủ nghĩa", group: "Writing", icon: SKILL_ICON.pencil, prompt: "Rút gọn nội dung trang này, giữ đủ nghĩa" },
+    { id: "sua-ngu-phap", command: "/sua-ngu-phap", title: "Sửa ngữ pháp", desc: "Chỉnh lỗi chính tả và câu", group: "Writing", icon: SKILL_ICON.pencil, prompt: "Sửa ngữ pháp và chính tả cho nội dung trang này" },
+    { id: "doi-giong", command: "/doi-giong", title: "Đổi giọng văn", desc: "Đổi tông, giữ nguyên ý", group: "Writing", icon: SKILL_ICON.pencil, prompt: "Đổi giọng văn của nội dung trang này, giữ nguyên ý" },
+    { id: "hoi-sau", command: "/hoi-sau", title: "Hỏi sâu", desc: "Đào sâu bằng câu hỏi phản biện", group: "Analysis", icon: SKILL_ICON.search, prompt: "Đặt câu hỏi phản biện để đào sâu nội dung trang này" },
+    { id: "so-sanh", command: "/so-sanh", title: "So sánh", desc: "Đối chiếu điểm giống và khác", group: "Analysis", icon: SKILL_ICON.list, prompt: "So sánh các luận điểm chính trong nội dung này" },
+    { id: "phan-tich", command: "/phan-tich", title: "Phân tích", desc: "Phân tích cấu trúc và lập luận", group: "Analysis", icon: SKILL_ICON.search, prompt: "Phân tích cấu trúc và lập luận của trang này" },
+    { id: "brainstorm", command: "/brainstorm", title: "Brainstorm", desc: "Gợi ý hướng khai thác tiếp", group: "Analysis", icon: SKILL_ICON.search, prompt: "Brainstorm các hướng khai thác tiếp từ nội dung trang này" },
   ];
+
+  const RECOMMENDED_SKILL_IDS = ["tom-tat", "giai-thich", "hoi-sau", "viet-lai"];
+  const SKILL_GROUP_ORDER = ["Writing", "Reading", "Analysis"];
 
   const panel = {
     open: false,
     view: "home",
     getPage: () => null,
+    getTabs: () => [],
+    getActiveTabId: () => null,
     getSelection: () => "",
   };
 
@@ -34,7 +46,14 @@ const AskAI = (() => {
     selectedProviders: ["chatgpt"],
     selectedSkill: "",
     skillHighlight: 0,
-    skillPickerDismissed: false,
+    skillQuery: "",
+    skillFromSlash: false,
+    selectedTabIds: [],
+    followActiveTab: true,
+    tabQuery: "",
+    tabManage: false,
+    skillLibrary: false,
+    menu: "skill",
   };
 
   const providers = {};
@@ -61,45 +80,181 @@ const AskAI = (() => {
     return PROVIDERS.find((p) => p.id === id);
   }
 
+  function skillById(id) {
+    return SKILLS.find((s) => s.id === id) || null;
+  }
+
   function skillFromPrompt(text) {
     const token = String(text || "").trim().split(/\s+/)[0].toLowerCase();
     return SKILLS.find((s) => s.command === token) || null;
   }
 
-  function slashFilter(text) {
-    const m = String(text || "").match(/^\/([^\s]*)$/);
-    return m ? m[1].toLowerCase() : null;
+  function resolveSkill(prompt) {
+    return skillById(overlay.selectedSkill) || skillFromPrompt(prompt);
+  }
+
+  function slashToken(text) {
+    const m = String(text || "").match(/(^|\s)(\/([^\s]*))$/);
+    return m ? { full: m[2], query: m[3].toLowerCase() } : null;
+  }
+
+  function atToken(text) {
+    const m = String(text || "").match(/(^|\s)(@([^\s]*))$/);
+    return m ? { full: m[2], query: m[3].toLowerCase() } : null;
+  }
+
+  function stripTrailingToken(text, token) {
+    if (!token) return String(text || "");
+    const value = String(text || "");
+    if (!value.endsWith(token.full)) return value;
+    return value.slice(0, value.length - token.full.length).replace(/[ \t]+$/, "");
+  }
+
+  function skillMatchesQuery(skill, query) {
+    const q = String(query || "").toLowerCase();
+    if (!q) return true;
+    return (
+      skill.command.slice(1).includes(q) ||
+      skill.title.toLowerCase().includes(q) ||
+      skill.desc.toLowerCase().includes(q) ||
+      skill.group.toLowerCase().includes(q)
+    );
+  }
+
+  function recommendedSkills() {
+    return RECOMMENDED_SKILL_IDS.map(skillById).filter(Boolean);
   }
 
   function filteredSkills() {
-    const q = slashFilter(overlay.prompt);
-    if (q === null) return SKILLS.slice();
-    return SKILLS.filter((s) => (
-      s.command.slice(1).includes(q) ||
-      s.title.toLowerCase().includes(q) ||
-      s.desc.toLowerCase().includes(q)
-    ));
+    const source = overlay.skillLibrary ? SKILLS : recommendedSkills();
+    return source.filter((s) => skillMatchesQuery(s, overlay.skillQuery));
+  }
+
+  function skillMenuItems() {
+    return filteredSkills();
+  }
+
+  function moveSkillHighlight(delta) {
+    const items = skillMenuItems();
+    if (!items.length) return;
+    const start = overlay.skillHighlight < 0 ? (delta > 0 ? -1 : 0) : overlay.skillHighlight;
+    overlay.skillHighlight = (start + delta + items.length) % items.length;
+    SkillPicker.render();
+  }
+
+  function groupedLibrarySkills() {
+    const items = SKILLS.filter((s) => skillMatchesQuery(s, overlay.skillQuery));
+    return SKILL_GROUP_ORDER.map((group) => ({
+      group,
+      skills: items.filter((s) => s.group === group),
+    })).filter((g) => g.skills.length);
   }
 
   function pickerIsOpen() {
-    return slashFilter(overlay.prompt) !== null && !overlay.skillPickerDismissed;
+    return overlay.menu === "skill";
+  }
+
+  function setPrompt(value, { focus = false } = {}) {
+    overlay.prompt = value;
+    const input = $("askPrompt");
+    if (input && input.value !== value) input.value = value;
+    if (focus && input) {
+      input.focus();
+      input.setSelectionRange(value.length, value.length);
+    }
+  }
+
+  function returnToSkill() {
+    overlay.menu = "skill";
+    overlay.skillQuery = "";
+    overlay.skillFromSlash = false;
+    overlay.skillLibrary = false;
+    overlay.tabManage = false;
+    overlay.tabQuery = "";
+    SkillPicker.render();
+    TabContext.render();
+  }
+
+  function closeMenus() {
+    returnToSkill();
+  }
+
+  function openSkillMenu(query = "", { fromSlash = false } = {}) {
+    overlay.menu = "skill";
+    overlay.skillQuery = query;
+    overlay.skillFromSlash = fromSlash;
+    overlay.skillHighlight = -1;
+    overlay.tabManage = false;
+    overlay.skillLibrary = Boolean(fromSlash && query);
+    TabContext.render();
+    SkillPicker.render();
+    if (overlay.skillLibrary) {
+      window.requestAnimationFrame(() => {
+        const search = $("skillSearch");
+        if (!search) return;
+        if (search.value !== overlay.skillQuery) search.value = overlay.skillQuery;
+        search.focus();
+      });
+    }
+  }
+
+  function openSkillLibrary() {
+    overlay.menu = "skill";
+    overlay.skillLibrary = true;
+    overlay.skillQuery = "";
+    overlay.skillHighlight = -1;
+    overlay.skillFromSlash = false;
+    SkillPicker.render();
+    window.requestAnimationFrame(() => {
+      const search = $("skillSearch");
+      if (!search) return;
+      search.value = "";
+      search.focus();
+    });
+  }
+
+  function closeSkillLibrary() {
+    overlay.skillLibrary = false;
+    overlay.skillQuery = "";
+    overlay.skillHighlight = -1;
+    SkillPicker.render();
+  }
+
+  function openContextMenu(query = "") {
+    overlay.menu = "context";
+    overlay.tabQuery = query;
+    overlay.tabManage = true;
+    overlay.skillFromSlash = false;
+    overlay.skillLibrary = false;
+    SkillPicker.render();
+    TabContext.render();
   }
 
   function applySkill(skill) {
-    if (!skill) return;
+    if (!skill || skill.id === "all") return;
     overlay.selectedSkill = skill.id;
-    overlay.prompt = skill.command;
-    overlay.skillPickerDismissed = true;
-    overlay.skillHighlight = 0;
-    const input = $("askPrompt");
-    if (input) {
-      input.value = skill.command;
-      input.focus();
-      input.setSelectionRange(skill.command.length, skill.command.length);
-    }
-    AskAIComposer.updateCta();
-    SkillList.render();
+    overlay.skillQuery = "";
+    overlay.skillLibrary = false;
+    overlay.menu = "skill";
+    overlay.skillFromSlash = false;
+    setPrompt(stripTrailingToken(overlay.prompt, slashToken(overlay.prompt)), { focus: true });
+    AskAIComposer.render();
+  }
+
+  function clearSkill() {
+    overlay.selectedSkill = "";
     SkillPicker.render();
+    AskAIComposer.renderChip();
+    AskAIComposer.updateCta();
+  }
+
+  function tabDomain(tab) {
+    try {
+      return new URL(tab.url).hostname.replace(/^www\./, "");
+    } catch {
+      const display = String(tab.display || "");
+      return display.split("/")[0] || display || "";
+    }
   }
 
   function ensureProvider(id) {
@@ -113,8 +268,24 @@ const AskAI = (() => {
       .filter((p) => p && p.available && p.status !== "unavailable");
   }
 
+  function toggleProvider(id) {
+    const p = providerById(id);
+    if (!p || !p.available || p.status === "unavailable") return;
+    const selected = overlay.selectedProviders.includes(id);
+    if (selected) {
+      if (overlay.selectedProviders.length === 1) return;
+      overlay.selectedProviders = overlay.selectedProviders.filter((x) => x !== id);
+    } else {
+      overlay.selectedProviders = PROVIDERS.map((x) => x.id).filter(
+        (x) => x === id || overlay.selectedProviders.includes(x)
+      );
+    }
+    ProviderSelector.render();
+    AskAIComposer.updateCta();
+  }
+
   function canAsk() {
-    return Boolean(overlay.prompt.trim()) && overlayTargets().length > 0;
+    return Boolean(overlay.prompt.trim() || overlay.selectedSkill) && overlayTargets().length > 0;
   }
 
   function openedProviders() {
@@ -123,6 +294,39 @@ const AskAI = (() => {
 
   function isHome() {
     return panel.view === "home";
+  }
+
+  function allTabs() {
+    return panel.getTabs ? panel.getTabs() : [];
+  }
+
+  function activeTabId() {
+    return panel.getActiveTabId ? panel.getActiveTabId() : null;
+  }
+
+  function syncTabContext() {
+    const tabs = allTabs();
+    const live = new Set(tabs.map((t) => t.id));
+    overlay.selectedTabIds = overlay.selectedTabIds.filter((id) => live.has(id));
+    const active = activeTabId();
+    if (overlay.followActiveTab && active != null) overlay.selectedTabIds = [active];
+  }
+
+  function contextPages() {
+    const selected = new Set(overlay.selectedTabIds);
+    return allTabs().filter((t) => selected.has(t.id));
+  }
+
+  function contextTitle(pages) {
+    if (!pages.length) return "không có trang";
+    if (pages.length === 1) return pages[0].title || "trang hiện tại";
+    return pages.map((p) => p.title).join(", ");
+  }
+
+  function pagesSummary(pages) {
+    if (!pages.length) return "Không có tab nào được chọn làm ngữ cảnh.";
+    if (pages.length === 1) return pageSummary(pages[0]);
+    return pages.map((p, i) => `${i + 1}. ${p.title}\n${pageSummary(p)}`).join("\n\n");
   }
 
   function pageSummary(page) {
@@ -147,12 +351,14 @@ const AskAI = (() => {
   }
 
   function sendMessage(provider, prompt, page, history) {
+    const pages = Array.isArray(page) ? page : (page ? [page] : []);
     const q = prompt.toLowerCase();
-    const title = page?.title || "trang hiện tại";
-    const base = pageSummary(page);
+    const title = contextTitle(pages);
+    const base = pagesSummary(pages);
     const prior = [...history].reverse().find((m) => m.role === "ai");
     const isFollowUp = history.some((m) => m.role === "ai");
     const selectionMatch = prompt.match(/selection:\s*\n\s*"([\s\S]+)"/i);
+    const noTabs = !pages.length;
 
     let body;
     if (selectionMatch) {
@@ -160,8 +366,10 @@ const AskAI = (() => {
       if (/translate/i.test(prompt)) body = `English gist of the selected text:\n\n${snippet}`;
       else if (/rewrite/i.test(prompt)) body = `Rewritten selection:\n\n${snippet}`;
       else body = `About the selected text on “${title}”:\n\n${snippet}\n\n${base}`;
-    } else if (skillFromPrompt(prompt)) {
-      const skill = skillFromPrompt(prompt);
+    } else if (noTabs && resolveSkill(prompt)) {
+      body = "Bạn chưa chọn tab nào làm ngữ cảnh. Hãy chọn một hoặc nhiều tab rồi hỏi lại.";
+    } else if (resolveSkill(prompt)) {
+      const skill = resolveSkill(prompt);
       if (skill.id === "tom-tat") body = base;
       else if (skill.id === "giai-thich") body = `Giải thích “${title}” một cách đơn giản:\n\n${base}\n\nVí dụ: bạn có thể hỏi thêm một ý bất kỳ trong bài để mình diễn giải sâu hơn.`;
       else if (skill.id === "hoi-sau") body = `Một vài câu hỏi phản biện về “${title}”:\n\n• Điều gì còn thiếu so với hiện trạng đang mô tả?\n• Lợi ích nêu trong bài có đánh đổi gì không?\n• ${secondBullet(base)}\n\nBạn muốn mình trả lời câu nào trước?`;
@@ -181,11 +389,13 @@ const AskAI = (() => {
         body = `Tiếp tục cuộc trò chuyện.\n\nBạn hỏi: “${prompt}”\n\nDựa trên câu trả lời trước:\n${clip}`;
       }
     } else if (q.includes("summarize") || q.includes("tóm tắt") || q.includes("key point")) {
-      body = base;
+      body = noTabs ? "Bạn chưa chọn tab nào để tóm tắt." : base;
     } else if (q.includes("explain") || q.includes("giải thích")) {
-      body = `Trang này là “${title}”.\n\n${base}`;
+      body = noTabs ? `Về “${prompt}”:\n\nKhông có tab ngữ cảnh.` : `Trang này là “${title}”.\n\n${base}`;
     } else if (q.includes("translate")) {
-      body = `English gist of “${title}”:\n\n${base}`;
+      body = noTabs ? "Bạn chưa chọn tab nào để dịch." : `English gist of “${title}”:\n\n${base}`;
+    } else if (noTabs) {
+      body = `Về “${prompt}”.\n\nKhông có tab nào được chọn làm ngữ cảnh.`;
     } else {
       body = `Về “${prompt}”, đang xem “${title}”.\n\n${base}`;
     }
@@ -198,7 +408,7 @@ const AskAI = (() => {
     const slot = ensureProvider(provider.id);
     slot.isLoading = true;
     slot.error = "";
-    const page = panel.getPage ? panel.getPage() : null;
+    const page = contextPages();
     const history = slot.messages.slice();
     const delay = 550 + Math.random() * 500;
     window.setTimeout(() => {
@@ -222,7 +432,9 @@ const AskAI = (() => {
   }
 
   function sendToProviders(prompt, providerIds, source) {
-    const text = (prompt || "").trim();
+    const skill = resolveSkill(prompt);
+    const text = (prompt || "").trim() || skill?.prompt || "";
+    const routed = skill && !skillFromPrompt(text) ? `${skill.command} ${text}`.trim() : text;
     const targets = providerIds
       .map(providerById)
       .filter((p) => p && p.available && p.status !== "unavailable" && !ensureProvider(p.id).isLoading);
@@ -234,13 +446,12 @@ const AskAI = (() => {
       if (!slot.conversationId) slot.conversationId = Date.now();
       slot.messages.push({ role: "user", text, source });
       slot.error = "";
-      dispatch(p, text);
+      dispatch(p, routed);
     });
 
     overlay.prompt = "";
-    overlay.selectedSkill = "";
-    overlay.skillPickerDismissed = false;
-    overlay.selectedProviders = [targets[0].id];
+    overlay.skillQuery = "";
+    overlay.menu = null;
     const homeInput = $("askPrompt");
     if (homeInput) homeInput.value = "";
     Workspace.activate(targets[0].id);
@@ -273,6 +484,7 @@ const AskAI = (() => {
       if (!isHome()) ProviderNativeChatBox.saveDraft();
       if (!isHome()) ProviderMessageList.saveScroll();
       panel.view = id;
+      if (id === "home") overlay.menu = "skill";
       AskAISidePanel.render();
       if (id === "home") $("askPrompt")?.focus();
       else ProviderNativeChatBox.focus();
@@ -404,6 +616,13 @@ const AskAI = (() => {
     },
     setOpen(open) {
       panel.open = open;
+      if (open) {
+        overlay.followActiveTab = true;
+        overlay.selectedSkill = "";
+        overlay.skillLibrary = false;
+        overlay.menu = "skill";
+        overlay.tabManage = false;
+      }
       AskAISidePanel.render();
       if (!open) return;
       if (isHome()) $("askPrompt")?.focus();
@@ -414,7 +633,104 @@ const AskAI = (() => {
     },
   };
 
-  /* ---- ProviderSelector ---- */
+  /* ---- Composer skill + context ---- */
+  function tooltipForTabs(pages) {
+    if (!pages.length) return "Chọn tab làm ngữ cảnh";
+    const shown = pages.slice(0, 3).map((t) => t.title).join("\n• ");
+    const extra = pages.length > 3 ? `\n• +${pages.length - 3} tab khác` : "";
+    return `Đang sử dụng:\n• ${shown}${extra}`;
+  }
+
+  const TabContext = {
+    renderRow() {
+      syncTabContext();
+      const row = $("tabStatus");
+      const btn = $("tabStatusBtn");
+      const body = $("tabStatusBody");
+      const clear = $("tabClearBtn");
+      const pages = contextPages();
+      const n = pages.length;
+      const total = allTabs().length;
+      const open = overlay.menu === "context";
+      if (row) {
+        row.classList.toggle("is-empty", n === 0);
+        row.classList.toggle("is-multi", n > 1);
+      }
+      if (btn) {
+        btn.setAttribute("aria-expanded", String(open));
+        btn.title = tooltipForTabs(pages);
+      }
+      if (body) {
+        if (!n) {
+          body.innerHTML = `<span class="ctx-empty">Chọn tab</span>`;
+        } else if (n === 1) {
+          const t = pages[0];
+          body.innerHTML = `<span class="ctx-icon">${t.iconHtml || ""}</span><span class="ctx-row-title">${escapeHtml(t.title)}</span>`;
+        } else {
+          const stack = pages.slice(0, 3).map((t) => `<span class="ctx-icon">${t.iconHtml || ""}</span>`).join("");
+          body.innerHTML = `<span class="fav-stack">${stack}</span><span class="ctx-row-count">${n}/${total} tab</span>`;
+        }
+      }
+      if (clear) {
+        clear.hidden = n === 0;
+        clear.title = n > 1 ? "Bỏ chọn tất cả tab" : "Bỏ chọn tab";
+        clear.setAttribute("aria-label", clear.title);
+      }
+    },
+    render() {
+      TabContext.renderRow();
+      const panel = $("tabContextMenu");
+      const list = $("tabPickerList");
+      const count = $("tabPickerCount");
+      const open = overlay.menu === "context";
+      const tabs = allTabs();
+      const total = tabs.length;
+      const selected = new Set(overlay.selectedTabIds);
+      if (panel) {
+        panel.classList.toggle("is-open", open);
+        panel.setAttribute("aria-hidden", String(!open));
+      }
+      if (count) count.textContent = `Đã chọn ${selected.size}/${total} tab`;
+      if (!open || !list) return;
+      const scroll = list.scrollTop;
+      list.innerHTML = tabs.length
+        ? tabs.map((t) => {
+          const on = selected.has(t.id);
+          return `<button type="button" class="ctx-item ${on ? "selected" : ""}" data-tab="${t.id}">
+            <span class="ctx-check">${on ? "✓" : ""}</span>
+            <span class="ctx-icon">${t.iconHtml || ""}</span>
+            <span class="ctx-title">${escapeHtml(t.title)}</span>
+          </button>`;
+        }).join("")
+        : `<div class="skill-picker-empty">Không có tab đang mở</div>`;
+      list.scrollTop = scroll;
+    },
+    toggle(id) {
+      overlay.followActiveTab = false;
+      if (overlay.selectedTabIds.includes(id)) {
+        overlay.selectedTabIds = overlay.selectedTabIds.filter((x) => x !== id);
+      } else {
+        overlay.selectedTabIds = [...overlay.selectedTabIds, id];
+      }
+      const active = activeTabId();
+      if (overlay.selectedTabIds.length === 1 && overlay.selectedTabIds[0] === active) {
+        overlay.followActiveTab = true;
+      }
+      TabContext.render();
+      AskAIComposer.updateCta();
+    },
+    clear() {
+      overlay.followActiveTab = false;
+      overlay.selectedTabIds = [];
+      TabContext.render();
+      AskAIComposer.updateCta();
+    },
+    close() {
+      returnToSkill();
+      $("askPrompt")?.focus();
+    },
+  };
+
   const ProviderSelector = {
     render() {
       const wrap = $("homeProviderSelector");
@@ -423,8 +739,7 @@ const AskAI = (() => {
         const on = overlay.selectedProviders.includes(p.id);
         const unavailable = !p.available || p.status === "unavailable";
         return `<button type="button" class="ask-with-chip ${on ? "selected" : ""} ${unavailable ? "unavailable" : ""}"
-          data-provider="${p.id}" ${unavailable ? "disabled" : ""}>
-          <span class="ask-check">${on ? "✓" : ""}</span>
+          data-provider="${p.id}" aria-pressed="${on}" ${unavailable ? "disabled" : ""}>
           <span class="provider-tab-icon">${p.icon}</span>
           ${escapeHtml(p.name)}
         </button>`;
@@ -432,43 +747,71 @@ const AskAI = (() => {
     },
   };
 
-  function skillRowHtml(s, { active = false, picker = false } = {}) {
-    const cls = picker ? "skill-picker-item" : "skill-row";
-    return `<button type="button" class="${cls} ${active ? "active" : ""}" data-skill="${s.id}">
+  function skillRowHtml(s, { active = false } = {}) {
+    const selected = overlay.selectedSkill === s.id;
+    return `<button type="button" class="skill-picker-item ${selected ? "selected" : ""} ${active ? "active" : ""}" data-skill="${s.id}">
       <span class="skill-icon">${s.icon}</span>
       <span class="skill-copy">
         <span class="skill-title">${escapeHtml(s.title)}</span>
-        <span class="skill-desc">${escapeHtml(s.desc)}</span>
+        ${s.desc ? `<span class="skill-desc">${escapeHtml(s.desc)}</span>` : ""}
       </span>
       <span class="skill-cmd">${escapeHtml(s.command)}</span>
     </button>`;
   }
 
-  const SkillList = {
-    render() {
-      const list = $("homeSkills");
-      if (!list) return;
-      list.innerHTML = SKILLS.map((s) => {
-        const on = overlay.selectedSkill === s.id || overlay.prompt.trim() === s.command;
-        return skillRowHtml(s, { active: on });
-      }).join("");
-    },
-  };
-
   const SkillPicker = {
     render() {
+      const row = $("skillStatus");
+      const btn = $("skillStatusBtn");
+      const label = $("skillStatusLabel");
+      const clear = $("skillClearBtn");
       const el = $("skillPicker");
-      if (!el) return;
+      const home = $("skillRecommended");
+      const library = $("skillLibrary");
+      const list = $("skillLibraryList");
+      const search = $("skillSearch");
       const open = pickerIsOpen();
-      el.hidden = !open;
-      if (!open) return;
-      const items = filteredSkills();
-      if (!items.length) {
-        el.innerHTML = `<div class="skill-picker-empty">Không có skill phù hợp</div>`;
+      const skill = skillById(overlay.selectedSkill);
+      if (row) row.classList.toggle("is-empty", !skill);
+      if (label) label.textContent = skill ? skill.title : "Skill";
+      if (btn) btn.setAttribute("aria-expanded", String(open));
+      if (clear) {
+        clear.hidden = !skill;
+        clear.title = "Bỏ chọn skill";
+        clear.setAttribute("aria-label", "Bỏ chọn skill");
+      }
+      if (!el) return;
+      el.classList.toggle("is-open", open);
+      el.setAttribute("aria-hidden", String(!open));
+      if (!open) {
+        if (home) home.hidden = false;
+        if (library) library.hidden = true;
         return;
       }
+      const items = skillMenuItems();
       if (overlay.skillHighlight >= items.length) overlay.skillHighlight = 0;
-      el.innerHTML = items.map((s, i) => skillRowHtml(s, { active: i === overlay.skillHighlight, picker: true })).join("");
+      const inLibrary = overlay.skillLibrary;
+      if (home) home.hidden = inLibrary;
+      if (library) library.hidden = !inLibrary;
+      if (!inLibrary && home) {
+        const rec = recommendedSkills();
+        home.innerHTML = rec.map((s, i) => skillRowHtml(s, { active: i === overlay.skillHighlight })).join("");
+        return;
+      }
+      if (search && document.activeElement !== search && search.value !== overlay.skillQuery) {
+        search.value = overlay.skillQuery;
+      }
+      if (!list) return;
+      const groups = groupedLibrarySkills();
+      list.innerHTML = groups.length
+        ? groups.map((g) => {
+          const rows = g.skills.map((s) => {
+            const idx = items.findIndex((x) => x.id === s.id);
+            return skillRowHtml(s, { active: idx === overlay.skillHighlight });
+          }).join("");
+          return `<div class="skill-group-title">${escapeHtml(g.group)}</div>${rows}`;
+        }).join("")
+        : `<div class="skill-picker-empty">Không có skill phù hợp</div>`;
     },
   };
 
@@ -480,20 +823,44 @@ const AskAI = (() => {
       if (!show) return;
       const input = $("askPrompt");
       if (input && input.value !== overlay.prompt) input.value = overlay.prompt;
-      SkillList.render();
+      AskAIComposer.renderChip();
       SkillPicker.render();
+      TabContext.render();
       ProviderSelector.render();
       AskAIComposer.updateCta();
+    },
+    renderChip() {
+      const row = $("skillChipRow");
+      const label = $("skillChipLabel");
+      const skill = skillById(overlay.selectedSkill);
+      if (row) row.hidden = !skill;
+      if (label) label.textContent = skill ? skill.command : "";
     },
     updateCta() {
       const btn = $("askCta");
       if (!btn) return;
-      const n = overlayTargets().length;
       btn.disabled = !canAsk();
-      btn.textContent = n <= 1 ? "Ask →" : `Ask ${n} AIs →`;
     },
     submit() {
       sendToProviders(overlay.prompt, overlay.selectedProviders, "ask-ai");
+    },
+    onPromptInput(value) {
+      const at = atToken(value);
+      if (at) {
+        setPrompt(stripTrailingToken(value, at));
+        openContextMenu(at.query);
+        AskAIComposer.updateCta();
+        return;
+      }
+      overlay.prompt = value;
+      const slash = slashToken(value);
+      if (slash) openSkillMenu(slash.query, { fromSlash: true });
+      else if (overlay.skillFromSlash) {
+        overlay.skillFromSlash = false;
+        overlay.skillLibrary = false;
+        if (overlay.menu !== "context") openSkillMenu("");
+      }
+      AskAIComposer.updateCta();
     },
   };
 
@@ -511,48 +878,75 @@ const AskAI = (() => {
       Workspace.activate(btn.dataset.workspace);
     });
     $("askCta")?.addEventListener("click", () => AskAIComposer.submit());
-    $("askPrompt")?.addEventListener("input", (e) => {
-      overlay.prompt = e.target.value;
-      overlay.skillPickerDismissed = false;
-      const skill = skillFromPrompt(overlay.prompt);
-      overlay.selectedSkill = skill && overlay.prompt.trim() === skill.command ? skill.id : "";
-      overlay.skillHighlight = 0;
-      AskAIComposer.updateCta();
-      SkillList.render();
-      SkillPicker.render();
+    $("skillStatusBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (overlay.menu === "skill" && overlay.skillLibrary) closeSkillLibrary();
+      else openSkillMenu("");
+    });
+    $("skillClearBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      clearSkill();
+    });
+    $("tabStatusBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (overlay.menu === "context") returnToSkill();
+      else openContextMenu("");
+    });
+    $("tabClearBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      TabContext.clear();
+    });
+    $("skillChipClear")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      clearSkill();
+      $("askPrompt")?.focus();
+    });
+    $("composerInput")?.addEventListener("click", (e) => {
+      if (e.target.closest(".skill-chip-x")) return;
+      $("askPrompt")?.focus();
     });
     $("askPrompt")?.addEventListener("keydown", (e) => {
       if (pickerIsOpen()) {
-        const items = filteredSkills();
+        const items = skillMenuItems();
         if (e.key === "ArrowDown") {
           e.preventDefault();
-          if (!items.length) return;
-          overlay.skillHighlight = (overlay.skillHighlight + 1) % items.length;
-          SkillPicker.render();
+          moveSkillHighlight(1);
           return;
         }
         if (e.key === "ArrowUp") {
           e.preventDefault();
-          if (!items.length) return;
-          overlay.skillHighlight = (overlay.skillHighlight - 1 + items.length) % items.length;
-          SkillPicker.render();
+          moveSkillHighlight(-1);
           return;
         }
         if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          applySkill(items[overlay.skillHighlight] || items[0]);
-          return;
+          if (overlay.skillHighlight >= 0 && items[overlay.skillHighlight]) {
+            e.preventDefault();
+            applySkill(items[overlay.skillHighlight]);
+            return;
+          }
         }
         if (e.key === "Tab") {
-          e.preventDefault();
-          applySkill(items[overlay.skillHighlight] || items[0]);
-          return;
+          if (overlay.skillHighlight >= 0 && items[overlay.skillHighlight]) {
+            e.preventDefault();
+            applySkill(items[overlay.skillHighlight]);
+            return;
+          }
         }
-        if (e.key === "Escape") {
+      }
+      if (e.key === "Escape") {
+        if (overlay.skillLibrary) {
           e.preventDefault();
           e.stopPropagation();
-          overlay.skillPickerDismissed = true;
-          SkillPicker.render();
+          closeSkillLibrary();
+          return;
+        }
+        if (overlay.menu === "context") {
+          e.preventDefault();
+          e.stopPropagation();
+          returnToSkill();
           return;
         }
       }
@@ -561,42 +955,62 @@ const AskAI = (() => {
         AskAIComposer.submit();
       }
     });
-    $("homeSkills")?.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-skill]");
-      if (!btn) return;
-      applySkill(SKILLS.find((s) => s.id === btn.dataset.skill));
-    });
     $("skillPicker")?.addEventListener("click", (e) => {
+      e.stopPropagation();
       const btn = e.target.closest("[data-skill]");
       if (!btn) return;
-      applySkill(SKILLS.find((s) => s.id === btn.dataset.skill));
+      applySkill(skillById(btn.dataset.skill));
     });
-    $("allSkillsBtn")?.addEventListener("click", () => {
-      overlay.prompt = "/";
-      overlay.selectedSkill = "";
-      overlay.skillPickerDismissed = false;
-      overlay.skillHighlight = 0;
-      const input = $("askPrompt");
-      if (input) {
-        input.value = "/";
-        input.focus();
-        input.setSelectionRange(1, 1);
-      }
-      AskAIComposer.updateCta();
-      SkillList.render();
+    $("skillLibraryBack")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeSkillLibrary();
+    });
+    $("skillSearch")?.addEventListener("input", (e) => {
+      overlay.skillQuery = e.target.value;
+      overlay.skillHighlight = -1;
       SkillPicker.render();
+    });
+    $("skillSearch")?.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSkillLibrary();
+        return;
+      }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
+        e.stopPropagation();
+      }
+      const items = skillMenuItems();
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        moveSkillHighlight(1);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        moveSkillHighlight(-1);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (overlay.skillHighlight >= 0) applySkill(items[overlay.skillHighlight] || items[0]);
+      }
+    });
+    $("tabPickerList")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const btn = e.target.closest("[data-tab]");
+      if (!btn) return;
+      TabContext.toggle(Number(btn.dataset.tab));
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (overlay.menu !== "context" && !overlay.skillLibrary) return;
+      if (e.target.closest("#composerCard")) return;
+      returnToSkill();
     });
     $("homeProviderSelector")?.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-provider]");
       if (!btn || btn.disabled) return;
-      const id = btn.dataset.provider;
-      if (overlay.selectedProviders.includes(id)) {
-        overlay.selectedProviders = overlay.selectedProviders.filter((x) => x !== id);
-      } else {
-        overlay.selectedProviders = [...overlay.selectedProviders, id];
-      }
-      ProviderSelector.render();
-      AskAIComposer.updateCta();
+      toggleProvider(btn.dataset.provider);
     });
     $("providerChatForm")?.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -615,13 +1029,26 @@ const AskAI = (() => {
     });
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape" || !panel.open) return;
-      if (isHome() && pickerIsOpen()) return;
+      if (overlay.skillLibrary) {
+        e.preventDefault();
+        closeSkillLibrary();
+        $("askPrompt")?.focus();
+        return;
+      }
+      if (overlay.menu === "context") {
+        e.preventDefault();
+        returnToSkill();
+        $("askPrompt")?.focus();
+        return;
+      }
       AskAISidePanel.setOpen(false);
     });
   }
 
   function init(opts = {}) {
     panel.getPage = opts.getPage || panel.getPage;
+    panel.getTabs = opts.getTabs || panel.getTabs;
+    panel.getActiveTabId = opts.getActiveTabId || panel.getActiveTabId;
     panel.getSelection = opts.getSelection || panel.getSelection;
     PROVIDERS.forEach((p) => ensureProvider(p.id));
     bind();
@@ -635,16 +1062,19 @@ const AskAI = (() => {
     fillPrompt(text) {
       overlay.prompt = text || "";
       overlay.selectedSkill = skillFromPrompt(overlay.prompt)?.id || "";
-      overlay.skillPickerDismissed = slashFilter(overlay.prompt) === null;
-      overlay.skillHighlight = 0;
+      overlay.menu = "skill";
+      overlay.skillQuery = slashToken(overlay.prompt)?.query || "";
+      overlay.skillHighlight = -1;
       const input = $("askPrompt");
       if (input) input.value = overlay.prompt;
-      AskAIComposer.updateCta();
-      SkillList.render();
-      SkillPicker.render();
+      AskAIComposer.render();
       if (panel.open && !isHome()) Workspace.activate("home");
     },
     submit: AskAIComposer.submit,
+    syncTabs() {
+      if (!panel.open) return;
+      TabContext.render();
+    },
     providers: PROVIDERS,
   };
 })();

@@ -355,6 +355,7 @@ function renderTabs() {
   tabStrip.querySelectorAll("[data-close]").forEach((el) => {
     el.addEventListener("click", (e) => closeTab(Number(el.dataset.close), e));
   });
+  if (typeof AskAI !== "undefined") AskAI.syncTabs?.();
 }
 
 const ICON_INFO = `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a10 10 0 1 0 .01 20.01A10 10 0 0 0 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>`;
@@ -557,6 +558,16 @@ const DEMO_TABS = ["chinhtri", "vanhoa", "youtube", "wiki", "thethao"];
 DEMO_TABS.forEach((key, i) => createTab(key, null, i === 0));
 AskAI.init({
   getPage: () => currentTab(),
+  getActiveTabId: () => activeId,
+  getTabs: () => tabs.map((t) => ({
+    id: t.id,
+    title: t.title,
+    url: t.url,
+    display: t.display,
+    pageKey: t.pageKey,
+    query: t.query,
+    iconHtml: ICONS[t.icon] || ICONS.globe,
+  })),
   getSelection() {
     const sel = window.getSelection();
     const text = sel ? String(sel.toString()).trim() : "";

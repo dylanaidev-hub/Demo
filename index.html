@@ -126,31 +126,66 @@
             </header>
 
             <section class="panel-stage" id="homeView">
-              <div class="ask-home-head">
-                <div class="welcome-icon">
-                  <svg class="ask-ai-icon" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
-                    <path fill="#1A73E8" fill-rule="evenodd" d="M6 3.5h12A3.5 3.5 0 0 1 21.5 7v7A3.5 3.5 0 0 1 18 17.5h-6.15L8 21.15c-.42.3-1-.01-1-.52V17.5H6A3.5 3.5 0 0 1 2.5 14V7A3.5 3.5 0 0 1 6 3.5zM8.5 12.15a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8zm3.5 0a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8zm3.5 0a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8z"/>
-                  </svg>
+              <div class="ask-dock">
+                <div class="composer-card" id="composerCard">
+                  <div class="status-stack">
+                    <div class="status-block" id="skillStatus">
+                      <div class="skill-status-head">
+                        <button type="button" class="status-row" id="skillStatusBtn" aria-expanded="false">
+                          <svg class="status-caret" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path fill="currentColor" d="M4.2 2.4 7.8 6 4.2 9.6z"/></svg>
+                          <span class="status-label" id="skillStatusLabel">Skill</span>
+                        </button>
+                        <button type="button" class="ctx-clear" id="skillClearBtn" title="Bỏ chọn skill" aria-label="Bỏ chọn skill" hidden>×</button>
+                      </div>
+                      <div class="status-panel" id="skillPicker">
+                        <div id="skillRecommended"></div>
+                        <div class="skill-lib" id="skillLibrary" hidden>
+                          <button type="button" class="skill-lib-head" id="skillLibraryBack">
+                            <span class="skill-lib-back" aria-hidden="true">←</span>
+                            Tất cả skill
+                          </button>
+                          <input id="skillSearch" type="text" placeholder="Tìm skill..." autocomplete="off" spellcheck="false" />
+                          <div class="skill-lib-list" id="skillLibraryList"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="status-block tab-status" id="tabStatus">
+                      <div class="tab-status-head">
+                        <button type="button" class="status-row" id="tabStatusBtn" aria-expanded="false">
+                          <svg class="status-caret" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path fill="currentColor" d="M4.2 2.4 7.8 6 4.2 9.6z"/></svg>
+                          <span class="status-row-content" id="tabStatusBody"></span>
+                        </button>
+                        <button type="button" class="ctx-clear" id="tabClearBtn" title="Bỏ chọn tab" aria-label="Bỏ chọn tab" hidden>×</button>
+                      </div>
+                      <div class="status-panel" id="tabContextMenu">
+                        <div class="tab-panel">
+                          <div class="ctx-picker-list" id="tabPickerList"></div>
+                          <div class="ctx-picker-foot">
+                            <span id="tabPickerCount">Đã chọn 0 tab</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="composer-body">
+                    <div class="composer-input" id="composerInput">
+                      <div class="composer-chips" id="skillChipRow" hidden>
+                        <span class="skill-chip">
+                          <span id="skillChipLabel"></span>
+                          <button type="button" class="skill-chip-x" id="skillChipClear" title="Bỏ chọn skill" aria-label="Bỏ chọn skill">×</button>
+                        </span>
+                      </div>
+                      <textarea id="askPrompt" rows="3" maxlength="2000" placeholder="Nhập câu hỏi, / chọn skill, @ chọn tab"></textarea>
+                    </div>
+                    <div class="ask-compose-bar">
+                      <div class="ask-with" id="homeProviderSelector"></div>
+                      <button type="button" class="ask-cta" id="askCta" disabled title="Send" aria-label="Send">
+                        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3.4 20.6 21.2 12 3.4 3.4 3.3 10.1 15.5 12 3.3 13.9z"/></svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <h2>Ask AI</h2>
-                <p>What do you want to ask?</p>
               </div>
-              <section class="skill-card">
-                <header class="skill-card-head">
-                  <span class="skill-card-label">SKILL</span>
-                  <button type="button" class="skill-all" id="allSkillsBtn">Tất cả skill ›</button>
-                </header>
-                <div class="skill-list" id="homeSkills"></div>
-              </section>
-              <div class="ask-prompt-wrap">
-                <div class="skill-picker" id="skillPicker" hidden></div>
-                <textarea id="askPrompt" rows="3" maxlength="2000" placeholder="Nhập câu lệnh, gõ / để chọn skill..."></textarea>
-              </div>
-              <div class="composer-block">
-                <div class="composer-label">Ask with</div>
-                <div class="ask-with" id="homeProviderSelector"></div>
-              </div>
-              <button type="button" class="ask-cta" id="askCta" disabled>Ask →</button>
             </section>
 
             <section class="provider-pane" id="providerView" hidden>
