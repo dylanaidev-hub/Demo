@@ -202,6 +202,16 @@ const AskAI = (() => {
     TabContext.render();
   }
 
+  function collapseSkill() {
+    if (isSplitLayout()) return;
+    overlay.menu = null;
+    overlay.skillQuery = "";
+    overlay.skillFromSlash = false;
+    overlay.skillLibrary = false;
+    SkillPicker.render();
+    TabContext.render();
+  }
+
   function closeMenus() {
     returnToSkill();
   }
@@ -917,7 +927,7 @@ const AskAI = (() => {
     $("skillStatusBtn")?.addEventListener("click", (e) => {
       e.stopPropagation();
       if (isSplitLayout()) return;
-      if (overlay.menu === "skill" && overlay.skillLibrary) closeSkillLibrary();
+      if (overlay.menu === "skill") collapseSkill();
       else openSkillMenu("");
     });
     $("skillClearBtn")?.addEventListener("click", (e) => {
@@ -944,6 +954,9 @@ const AskAI = (() => {
     $("composerInput")?.addEventListener("click", (e) => {
       if (e.target.closest(".skill-chip-x")) return;
       $("askPrompt")?.focus();
+    });
+    $("askPrompt")?.addEventListener("input", (e) => {
+      AskAIComposer.onPromptInput(e.target.value);
     });
     $("askPrompt")?.addEventListener("keydown", (e) => {
       if (pickerIsOpen()) {

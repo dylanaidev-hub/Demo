@@ -371,6 +371,14 @@
   transition: max-height 0.18s ease;
 }
 
+.ask-dock[data-layout="stacked"] .status-panel {
+  transition: max-height 0.38s ease-in-out;
+}
+
+.ask-dock[data-layout="stacked"] .status-caret {
+  transition: transform 0.28s ease-in-out;
+}
+
 .status-panel.is-open {
   max-height: 380px;
   overflow: hidden;
