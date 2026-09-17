@@ -58,7 +58,6 @@ const AskAI = (() => {
     tabManage: false,
     skillLibrary: false,
     menu: "skill",
-    layout: "stacked",
   };
 
   const providers = {};
@@ -159,30 +158,8 @@ const AskAI = (() => {
     return overlay.menu === "skill";
   }
 
-  function isSplitLayout() {
-    return overlay.layout === "split";
-  }
-
   function skillPanelOpen() {
-    return isSplitLayout() || overlay.menu === "skill";
-  }
-
-  function applyComposerLayout() {
-    const split = overlay.layout === "split";
-    const dock = $("askDock");
-    const toggle = $("layoutToggle");
-    if (dock) dock.dataset.layout = split ? "split" : "stacked";
-    if (!toggle) return;
-    toggle.setAttribute("aria-pressed", String(split));
-    toggle.title = split ? "Gộp Skill vào chatbox" : "Tách Skill khỏi chatbox";
-    toggle.setAttribute("aria-label", toggle.title);
-  }
-
-  function toggleComposerLayout() {
-    overlay.layout = overlay.layout === "split" ? "stacked" : "split";
-    applyComposerLayout();
-    SkillPicker.render();
-    TabContext.render();
+    return true;
   }
 
   function setPrompt(value, { focus = false } = {}) {
@@ -202,16 +179,6 @@ const AskAI = (() => {
     overlay.skillLibrary = false;
     overlay.tabManage = false;
     overlay.tabQuery = "";
-    SkillPicker.render();
-    TabContext.render();
-  }
-
-  function collapseSkill() {
-    if (isSplitLayout()) return;
-    overlay.menu = null;
-    overlay.skillQuery = "";
-    overlay.skillFromSlash = false;
-    overlay.skillLibrary = false;
     SkillPicker.render();
     TabContext.render();
   }
@@ -771,7 +738,8 @@ const AskAI = (() => {
           body.innerHTML = `<span class="ctx-empty">Chọn tab</span>`;
         } else if (n === 1) {
           const t = pages[0];
-          body.innerHTML = `<span class="ctx-icon">${t.iconHtml || ""}</span><span class="ctx-row-title">${escapeHtml(t.title)}</span>`;
+          const current = t.id === activeTabId() ? `<span class="ctx-current">thẻ hiện tại</span>` : "";
+          body.innerHTML = `<span class="ctx-icon">${t.iconHtml || ""}</span><span class="ctx-row-title">${escapeHtml(t.title)}</span>${current}`;
         } else {
           const stack = pages.slice(0, 3).map((t) => `<span class="ctx-icon">${t.iconHtml || ""}</span>`).join("");
           body.innerHTML = `<span class="fav-stack">${stack}</span><span class="ctx-row-count">${n}/${total} tab</span>`;
@@ -794,18 +762,22 @@ const AskAI = (() => {
       const selected = new Set(overlay.selectedTabIds);
       if (panel) {
         panel.classList.toggle("is-open", open);
+        panel.hidden = !open;
         panel.setAttribute("aria-hidden", String(!open));
       }
       if (count) count.textContent = `Đã chọn ${selected.size}/${total} tab`;
       if (!open || !list) return;
+      const currentId = activeTabId();
       const scroll = list.scrollTop;
       list.innerHTML = tabs.length
         ? tabs.map((t) => {
           const on = selected.has(t.id);
-          return `<button type="button" class="ctx-item ${on ? "selected" : ""}" data-tab="${t.id}">
+          const current = t.id === currentId;
+          return `<button type="button" class="ctx-item ${on ? "selected" : ""} ${current ? "is-current" : ""}" data-tab="${t.id}">
             <span class="ctx-check">${on ? "✓" : ""}</span>
             <span class="ctx-icon">${t.iconHtml || ""}</span>
             <span class="ctx-title">${escapeHtml(t.title)}</span>
+            ${current ? `<span class="ctx-current">thẻ hiện tại</span>` : ""}
           </button>`;
         }).join("")
         : `<div class="skill-picker-empty">Không có tab đang mở</div>`;
@@ -863,7 +835,6 @@ const AskAI = (() => {
       <span class="skill-icon">${s.icon}</span>
       <span class="skill-copy">
         <span class="skill-title">${escapeHtml(s.title)}</span>
-        ${s.desc ? `<span class="skill-desc">${escapeHtml(s.desc)}</span>` : ""}
       </span>
       <span class="skill-cmd">${escapeHtml(s.command)}</span>
     </button>`;
@@ -883,10 +854,10 @@ const AskAI = (() => {
       const open = skillPanelOpen();
       const skill = skillById(overlay.selectedSkill);
       if (row) row.classList.toggle("is-empty", !skill);
-      if (label) label.textContent = isSplitLayout() || !skill ? "Skill" : skill.title;
+      if (label) label.textContent = "Skill";
       if (btn) {
         btn.setAttribute("aria-expanded", String(open));
-        btn.disabled = isSplitLayout();
+        btn.disabled = true;
       }
       if (clear) {
         clear.hidden = !skill;
@@ -933,7 +904,6 @@ const AskAI = (() => {
       const view = $("homeView");
       const show = isHome();
       if (view) view.hidden = !show;
-      applyComposerLayout();
       if (!show) return;
       const input = $("askPrompt");
       if (input && input.value !== overlay.prompt) input.value = overlay.prompt;
@@ -993,16 +963,8 @@ const AskAI = (() => {
       Workspace.activate(btn.dataset.workspace);
     });
     $("askCta")?.addEventListener("click", () => AskAIComposer.submit());
-    $("layoutToggle")?.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleComposerLayout();
-    });
     $("skillStatusBtn")?.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (isSplitLayout()) return;
-      if (overlay.menu === "skill") collapseSkill();
-      else openSkillMenu("");
     });
     $("skillClearBtn")?.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1140,8 +1102,13 @@ const AskAI = (() => {
       TabContext.toggle(Number(btn.dataset.tab));
     });
     document.addEventListener("pointerdown", (e) => {
-      if (overlay.menu !== "context" && !overlay.skillLibrary) return;
-      if (e.target.closest("#askDock") || e.target.closest("#layoutToggle")) return;
+      if (overlay.menu === "context") {
+        if (e.target.closest("#tabContextMenu") || e.target.closest("#tabStatusBtn") || e.target.closest("#tabClearBtn")) return;
+        returnToSkill();
+        return;
+      }
+      if (!overlay.skillLibrary) return;
+      if (e.target.closest("#askDock")) return;
       returnToSkill();
     });
     $("homeProviderSelector")?.addEventListener("click", (e) => {
