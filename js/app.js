@@ -338,9 +338,26 @@ function currentHistory() {
   return historyMap[activeId];
 }
 
+function contextTabIds() {
+  if (typeof AskAI === "undefined" || !AskAI.getContextTabIds) return new Set();
+  return new Set(AskAI.getContextTabIds());
+}
+
+function refreshTabContextMarks() {
+  const ids = contextTabIds();
+  tabStrip.querySelectorAll(".tab").forEach((el) => {
+    const on = ids.has(Number(el.dataset.id));
+    el.classList.toggle("ai-context", on);
+    const title = tabs.find((t) => t.id === Number(el.dataset.id))?.title || "";
+    el.title = on ? `${title} · ngữ cảnh Ask AI` : title;
+  });
+}
+
 function renderTabs() {
+  if (typeof AskAI !== "undefined") AskAI.syncTabs?.();
+  const inContext = contextTabIds();
   tabStrip.innerHTML = tabs.map((t) => `
-    <div class="tab ${t.id === activeId ? "active" : ""}" data-id="${t.id}" title="${escapeHtml(t.title)}">
+    <div class="tab ${t.id === activeId ? "active" : ""} ${inContext.has(t.id) ? "ai-context" : ""}" data-id="${t.id}" title="${escapeHtml(inContext.has(t.id) ? `${t.title} · ngữ cảnh Ask AI` : t.title)}">
       <div class="tab-bg"></div>
       <span class="tab-favicon">${ICONS[t.icon] || ICONS.globe}</span>
       <span class="tab-title">${escapeHtml(t.title)}</span>
@@ -355,7 +372,6 @@ function renderTabs() {
   tabStrip.querySelectorAll("[data-close]").forEach((el) => {
     el.addEventListener("click", (e) => closeTab(Number(el.dataset.close), e));
   });
-  if (typeof AskAI !== "undefined") AskAI.syncTabs?.();
 }
 
 const ICON_INFO = `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a10 10 0 1 0 .01 20.01A10 10 0 0 0 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>`;
@@ -576,6 +592,7 @@ AskAI.init({
     if (sel.anchorNode && page && !page.contains(sel.anchorNode)) return "";
     return text.slice(0, 500);
   },
+  onContextChange: refreshTabContextMarks,
 });
 bindChrome();
 

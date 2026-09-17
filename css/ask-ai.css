@@ -492,6 +492,72 @@
   border-radius: 0 0 12px 12px;
 }
 
+.selection-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 12px 0;
+  padding: 8px 6px 8px 10px;
+  border: 1px solid #e8f0fe;
+  border-left: 3px solid #1a73e8;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.selection-preview[hidden] {
+  display: none !important;
+}
+
+.selection-preview-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #1a73e8;
+  opacity: 0.85;
+}
+
+.selection-preview-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.selection-preview-kicker {
+  margin-bottom: 2px;
+  color: #1a73e8;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.selection-preview-text {
+  margin: 0;
+  color: #3c4043;
+  font-size: 12px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.selection-preview-x {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #80868b;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.selection-preview-x:hover {
+  background: #e8f0fe;
+  color: #3c4043;
+}
+
 .composer-input {
   display: flex;
   align-items: flex-start;

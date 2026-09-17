@@ -39,6 +39,7 @@ const AskAI = (() => {
     getTabs: () => [],
     getActiveTabId: () => null,
     getSelection: () => "",
+    onContextChange: () => {},
   };
 
   const overlay = {
@@ -49,6 +50,9 @@ const AskAI = (() => {
     skillQuery: "",
     skillFromSlash: false,
     selectedTabIds: [],
+    pageExcerpt: "",
+    excerptTabId: null,
+    excerptDismissed: false,
     followActiveTab: true,
     tabQuery: "",
     tabManage: false,
@@ -349,10 +353,64 @@ const AskAI = (() => {
     if (overlay.followActiveTab && active != null) overlay.selectedTabIds = [active];
   }
 
+  function notifyContextChange() {
+    if (typeof panel.onContextChange === "function") panel.onContextChange();
+  }
+
   function contextPages() {
     const selected = new Set(overlay.selectedTabIds);
     return allTabs().filter((t) => selected.has(t.id));
   }
+
+  function livePageSelection() {
+    return String(panel.getSelection ? panel.getSelection() : "").trim();
+  }
+
+  function visibleExcerpt() {
+    if (!overlay.pageExcerpt || overlay.excerptDismissed) return "";
+    if (!overlay.selectedTabIds.length) return "";
+    return overlay.pageExcerpt;
+  }
+
+  function clearPageExcerpt() {
+    overlay.pageExcerpt = "";
+    overlay.excerptTabId = null;
+    overlay.excerptDismissed = false;
+  }
+
+  function capturePageSelection() {
+    if (!panel.open) return;
+    const text = livePageSelection();
+    if (text) {
+      if (text !== overlay.pageExcerpt) overlay.excerptDismissed = false;
+      overlay.pageExcerpt = text;
+      overlay.excerptTabId = activeTabId();
+      SelectionPreview.render();
+      return;
+    }
+    const sel = window.getSelection();
+    const node = sel && sel.anchorNode;
+    const page = document.getElementById("page");
+    if (!node || !page || !page.contains(node)) return;
+    clearPageExcerpt();
+    SelectionPreview.render();
+  }
+
+  const SelectionPreview = {
+    render() {
+      const el = $("selectionPreview");
+      const textEl = $("selectionPreviewText");
+      const excerpt = visibleExcerpt();
+      if (el) el.hidden = !excerpt;
+      if (!textEl) return;
+      textEl.textContent = excerpt;
+      if (el) el.title = excerpt;
+    },
+    dismiss() {
+      overlay.excerptDismissed = true;
+      SelectionPreview.render();
+    },
+  };
 
   function contextTitle(pages) {
     if (!pages.length) return "không có trang";
@@ -468,10 +526,16 @@ const AskAI = (() => {
     }, delay);
   }
 
+  function withSelection(text) {
+    const excerpt = visibleExcerpt();
+    if (!excerpt) return text;
+    return `${text}\n\nselection:\n"${excerpt}"`;
+  }
+
   function sendToProviders(prompt, providerIds, source) {
     const skill = resolveSkill(prompt);
     const text = (prompt || "").trim() || skill?.prompt || "";
-    const routed = skill && !skillFromPrompt(text) ? `${skill.command} ${text}`.trim() : text;
+    const routed = withSelection(skill && !skillFromPrompt(text) ? `${skill.command} ${text}`.trim() : text);
     const targets = providerIds
       .map(providerById)
       .filter((p) => p && p.available && p.status !== "unavailable" && !ensureProvider(p.id).isLoading);
@@ -659,8 +723,13 @@ const AskAI = (() => {
         overlay.skillLibrary = false;
         overlay.menu = "skill";
         overlay.tabManage = false;
+        syncTabContext();
+        capturePageSelection();
+      } else {
+        clearPageExcerpt();
       }
       AskAISidePanel.render();
+      notifyContextChange();
       if (!open) return;
       if (isHome()) $("askPrompt")?.focus();
       else ProviderNativeChatBox.focus();
@@ -754,13 +823,17 @@ const AskAI = (() => {
         overlay.followActiveTab = true;
       }
       TabContext.render();
+      SelectionPreview.render();
       AskAIComposer.updateCta();
+      notifyContextChange();
     },
     clear() {
       overlay.followActiveTab = false;
       overlay.selectedTabIds = [];
       TabContext.render();
+      SelectionPreview.render();
       AskAIComposer.updateCta();
+      notifyContextChange();
     },
     close() {
       returnToSkill();
@@ -867,6 +940,7 @@ const AskAI = (() => {
       AskAIComposer.renderChip();
       SkillPicker.render();
       TabContext.render();
+      SelectionPreview.render();
       ProviderSelector.render();
       AskAIComposer.updateCta();
     },
@@ -951,9 +1025,22 @@ const AskAI = (() => {
       clearSkill();
       $("askPrompt")?.focus();
     });
+    $("selectionPreviewClear")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      SelectionPreview.dismiss();
+    });
     $("composerInput")?.addEventListener("click", (e) => {
       if (e.target.closest(".skill-chip-x")) return;
       $("askPrompt")?.focus();
+    });
+    document.addEventListener("selectionchange", () => {
+      if (!panel.open) return;
+      capturePageSelection();
+    });
+    document.addEventListener("mouseup", () => {
+      if (!panel.open) return;
+      capturePageSelection();
     });
     $("askPrompt")?.addEventListener("input", (e) => {
       AskAIComposer.onPromptInput(e.target.value);
@@ -1100,6 +1187,7 @@ const AskAI = (() => {
     panel.getTabs = opts.getTabs || panel.getTabs;
     panel.getActiveTabId = opts.getActiveTabId || panel.getActiveTabId;
     panel.getSelection = opts.getSelection || panel.getSelection;
+    panel.onContextChange = opts.onContextChange || panel.onContextChange;
     PROVIDERS.forEach((p) => ensureProvider(p.id));
     bind();
     AskAISidePanel.render();
@@ -1123,7 +1211,18 @@ const AskAI = (() => {
     submit: AskAIComposer.submit,
     syncTabs() {
       if (!panel.open) return;
+      const prevTab = overlay.excerptTabId;
       TabContext.render();
+      const active = activeTabId();
+      if (prevTab != null && prevTab !== active && !livePageSelection()) {
+        clearPageExcerpt();
+      }
+      SelectionPreview.render();
+    },
+    getContextTabIds() {
+      if (!panel.open) return [];
+      syncTabContext();
+      return overlay.selectedTabIds.slice();
     },
     providers: PROVIDERS,
   };

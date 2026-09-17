@@ -180,6 +180,14 @@
                     </div>
                   </div>
                   <div class="composer-body">
+                    <div class="selection-preview" id="selectionPreview" hidden>
+                      <svg class="selection-preview-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M7.2 6.4c2.2 0 3.8 1.7 3.8 4.2 0 2.8-2 5.1-4.7 6.2l-.7-1.2c1.9-.8 3-2.2 3.2-3.6-.4.2-.9.3-1.5.3-1.6 0-2.8-1.1-2.8-2.8 0-1.7 1.2-3.1 2.7-3.1zm8.4 0c2.2 0 3.8 1.7 3.8 4.2 0 2.8-2 5.1-4.7 6.2l-.7-1.2c1.9-.8 3-2.2 3.2-3.6-.4.2-.9.3-1.5.3-1.6 0-2.8-1.1-2.8-2.8 0-1.7 1.2-3.1 2.7-3.1z"/></svg>
+                      <div class="selection-preview-body">
+                        <div class="selection-preview-kicker">Đoạn đã chọn</div>
+                        <p class="selection-preview-text" id="selectionPreviewText"></p>
+                      </div>
+                      <button type="button" class="selection-preview-x" id="selectionPreviewClear" title="Bỏ đoạn đã chọn" aria-label="Bỏ đoạn đã chọn">×</button>
+                    </div>
                     <div class="composer-input" id="composerInput">
                       <div class="composer-chips" id="skillChipRow" hidden>
                         <span class="skill-chip">
